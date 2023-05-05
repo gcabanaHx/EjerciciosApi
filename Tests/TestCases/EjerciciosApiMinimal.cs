@@ -1,5 +1,4 @@
 ﻿using API.Models;
-using RestSharp;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -12,37 +11,13 @@ namespace Tests.TestCases
 {
     public class EjerciciosApiMinimal : BaseTest
     {
+        public HttpStatusCode statusCode;
         private const string adminsEndpoint = "/admins";
-        private const string usersEndpoint = "/users";
         private const string credentials = "admin:8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92";
         private const string deleteAllUsersEndpoint = "/users/deleteAll";
-        public HttpStatusCode statusCode;
+        private const string usersEndpoint = "/users";
 
-        #region Post
-        [Theory] //POST - 1
-        [InlineData("Test_Admin_13", "1234")]
-        public void Post_CreateNewAdmin_VerifyIfItIsOnTheList(string username, string passHash)
-        {
-            bool flag = false;
-            //Post Admin Creation
-            var payload = new { username, passHash };
-            var adminToBeCreated = client.Post<Admin>(adminsEndpoint, payload,
-                headers: Data.GetAuthorizationHeader(credentials));
-
-            Assert.Equal(adminToBeCreated.UserName, username);
-            Assert.Equal(adminToBeCreated.PassHash.Length, 64);
-            int adminToBeCreatedId = adminToBeCreated.Id;
-
-
-            //Get admin ID created above
-            var adminCreated = client.Get<Admin>($"{adminsEndpoint}/{adminToBeCreatedId}",
-                headers: Data.GetAuthorizationHeader(credentials));
-            if (adminCreated.Id.Equals(adminToBeCreatedId))
-            {
-                flag = true;
-            }
-            Assert.True(flag);
-        }
+        #region POST
 
         [Theory] //POST -2
         [InlineData(99999, "Password")]
@@ -55,39 +30,58 @@ namespace Tests.TestCases
 
             var code = (int)response.StatusCode;
 
-            Assert.Equal(code, 400);
-
+            Assert.Equal(400, code);
         }
-        #endregion
+
+        [Theory] //POST - 1
+        [InlineData("Test_Admin_15", "1234")] //change username before using it
+        public void Post_CreateNewAdmin_VerifyIfItIsOnTheList(string username, string passHash)
+        {
+            //Post Admin Creation
+            var payload = new { username, passHash };
+            var adminToBeCreated = client.Post<Admin>(adminsEndpoint, payload,
+                headers: Data.GetAuthorizationHeader(credentials));
+
+            Assert.Equal(adminToBeCreated.UserName, username);
+            Assert.Equal(adminToBeCreated.PassHash.Length, 64);
+            int adminToBeCreatedId = adminToBeCreated.Id;
+
+            //Get admin ID created above
+            var adminCreated = client.Get<Admin>($"{adminsEndpoint}/{adminToBeCreatedId}",
+                headers: Data.GetAuthorizationHeader(credentials));
+
+            Assert.Equal(adminCreated.Id, adminToBeCreatedId);
+        }
+
+        #endregion POST
 
         #region GET
+
         [Theory] //GET - 1
         [InlineData(1, "admin", "49dc52e6bf2abe5ef6e2bb5b0f1ee2d765b922ae6cc8b95d39dc06c21c848f8c")]
         public void Get_AdminByID_ApiResponseCode200AndApiResponseTimeLowerThan1(int id, string username, string passHash)
         {
             //get admin by id, and count time to get it
             var sw = Stopwatch.StartNew();
-            
             var response = client.Get($"{adminsEndpoint}/{id}",
                 headers: Data.GetAuthorizationHeader(credentials));
-            
+
             var time = TimeSpan.FromMilliseconds(sw.ElapsedMilliseconds);
 
             Assert.True(time.Seconds <= 1);
-       
+
             //Esto lo dijo Bruno:
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         }
 
         [Theory]// GET - 2
-        [InlineData(1)]
+        [InlineData(26)]
         public void Get_UserById_UserDataIsPresentJsonSchema(int id)
         {
-            
             var user = client.Get<User>($"{usersEndpoint}/{id}",
                 headers: Data.GetAuthorizationHeader(credentials));
-  
-            //Assert user data is not empty 
+
+            //Assert user data is not empty
             Assert.NotNull(user.Id);
             Assert.NotNull(user.Name);
             Assert.NotNull(user.LastName);
@@ -98,37 +92,22 @@ namespace Tests.TestCases
             var response = client.Get($"{usersEndpoint}/{id}",
                  headers: Data.GetAuthorizationHeader(credentials));
 
-            Assert.Equal(response.ContentType, "application/json");
+            Assert.Equal("application/json", response.ContentType);
         }
 
-        #endregion
+        #endregion GET
 
-        #region Put
-        [Theory]
-        [InlineData(1, 2147483648)]
-        public void Put_UpdateUserOutOfBoundPhoneNumber(int id, long phonenumber)
-        {
-            var payload = new { phonenumber };
-
-            var response = client.Put($"{usersEndpoint}/{id}", payload,
-           headers: Data.GetAuthorizationHeader(credentials));
-
-
-            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-
-
-        }
+        #region PUT
 
         [Theory] //PUT - 2
-        [InlineData(1, "UpdatedName","UpdateLastName",099787777,"update@gmail.com")]
-        public void Put_UpdateUserAndVerify(int id,string name, string lastname, long phonenumber, string email)
+        [InlineData(26, "UpdatedName", "UpdateLastName", 099787777, "update@gmail.com")] //check Id in postman before runing it
+        public void Put_UpdateUserAndVerify(int id, string name, string lastname, long phonenumber, string email)
         {
             //Update user
-            var payload = new { name, lastname,phonenumber,email};
+            var payload = new { name, lastname, phonenumber, email };
 
             var response = client.Put($"{usersEndpoint}/{id}", payload,
            headers: Data.GetAuthorizationHeader(credentials));
-
 
             //Verify if updated
             var user = client.Get<User>($"{usersEndpoint}/{id}",
@@ -139,29 +118,25 @@ namespace Tests.TestCases
             Assert.Equal(user.Email, email);
             Assert.Equal((long)user.PhoneNumber, phonenumber);
         }
-        #endregion
 
-
-        #region Delete
-        [Theory] //DELETE - 1 
-        [InlineData(1,15)]
-        public void Delete_DeleteUserAndValidateResponseCode(int notExistingId,int existingId)
+        [Theory]
+        [InlineData(26, 2147483648)] //check Id in postman before runing it
+        public void Put_UpdateUserOutOfBoundPhoneNumber(int id, long phonenumber)
         {
-            //Verify error if user does not exist
-            var notExistingUserToBeDeleted = client.Delete($"{usersEndpoint}/delete/{notExistingId}",
-                headers: Data.GetAuthorizationHeader(credentials));
+            var payload = new { phonenumber };
 
-            Assert.Equal(HttpStatusCode.NoContent, notExistingUserToBeDeleted.StatusCode);
+            var response = client.Put($"{usersEndpoint}/{id}", payload,
+           headers: Data.GetAuthorizationHeader(credentials));
 
-            //Verify error with a user that exists
-            var existingUserToBeDeleted = client.Delete($"{usersEndpoint}/delete/{existingId}",
-               headers: Data.GetAuthorizationHeader(credentials));
-
-            Assert.Equal(HttpStatusCode.NoContent, notExistingUserToBeDeleted.StatusCode);
+            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         }
 
+        #endregion PUT
+
+        #region DELETE
+
         [Theory] //DELETE - 2
-        [InlineData("Juan","Perez",099998877,"juanperez@gmail.com")]
+        [InlineData("Juan", "Perez", 099998877, "juanperez@gmail.com")]
         public void Delete_CreateUserDeleteItAndVerify(string name, string lastName, int phoneNumber, string email)
         {
             //Create user to be deleted
@@ -186,7 +161,6 @@ namespace Tests.TestCases
                       headers: Data.GetAuthorizationHeader(credentials));
 
             Assert.Equal(0, response.ContentLength);
-
         }
 
         [Fact] //DELETE - 3
@@ -194,7 +168,23 @@ namespace Tests.TestCases
         {
             var deleteAllUsers = client.Delete($"{deleteAllUsersEndpoint}",
                 headers: Data.GetAuthorizationHeader(credentials));
- 
+        }
+
+        [Theory] //DELETE - 1
+        [InlineData(1, 22)]
+        public void Delete_DeleteUserAndValidateResponseCode(int notExistingId, int existingId)
+        {
+            //Verify error if user does not exist
+            var notExistingUserToBeDeleted = client.Delete($"{usersEndpoint}/delete/{notExistingId}",
+                headers: Data.GetAuthorizationHeader(credentials));
+
+            Assert.Equal(HttpStatusCode.NoContent, notExistingUserToBeDeleted.StatusCode);
+
+            //Verify error with a user that exists
+            var existingUserToBeDeleted = client.Delete($"{usersEndpoint}/delete/{existingId}",
+               headers: Data.GetAuthorizationHeader(credentials));
+
+            Assert.Equal(HttpStatusCode.NoContent, existingUserToBeDeleted.StatusCode);
         }
 
         [Fact] //DELETE - 4
@@ -202,12 +192,11 @@ namespace Tests.TestCases
         {
             var listaDeUsuarios = client.Get<List<User>>($"{usersEndpoint}",
                 headers: Data.GetAuthorizationHeader(credentials));
-            
+
             Assert.False(listaDeUsuarios.Any());
         }
-        #endregion
 
-
+        #endregion DELETE
 
         // PARA TODOS LOS EJERCICIOS
 
